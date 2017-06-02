@@ -1,7 +1,7 @@
 # ansible-postgresql_streaming_replication
 This project can be used to setup streaming replication between two existing PostgreSQL servers.
 
-Useful if setting up streaming replciation between Ansible Tower PostgreSQL servers.
+Useful if setting up streaming replication between Ansible Tower PostgreSQL servers.
 
 # Use
 `ansible-playbook playbooks/postgresql_streaming_replication.yml -i INVENTORY`
