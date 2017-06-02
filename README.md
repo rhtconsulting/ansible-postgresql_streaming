@@ -1,4 +1,4 @@
-# ansible-postgresql_streaming_replication
+# ansible-postgresql_streaming
 This project can be used to setup streaming replication between two existing PostgreSQL servers.
 
 Useful if setting up streaming replication between Ansible Tower PostgreSQL servers.
