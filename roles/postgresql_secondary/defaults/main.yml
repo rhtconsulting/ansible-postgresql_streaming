@@ -1,0 +1,3 @@
+postgresql_user: postgres
+postgresql_dir: '/var/lib/pgsql'
+postgresql_data_dir: "{{ postgresql_dir }}/9.4/data"

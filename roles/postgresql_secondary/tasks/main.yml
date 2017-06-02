@@ -1,0 +1,83 @@
+# SOURCE:
+#   Parts of this play were borrowed from https://github.com/defionscode/ansible-postgres-streaming/blob/master/roles/secondary/tasks/main.yml
+
+- name: Verify required variables not set
+  fail:
+    msg: "Variable '{{ item }}' is not defined"
+  when: item not in vars
+  with_items:
+    - postgresql_user
+    - postgresql_primary_host
+    - postgresql_replicator_user
+    - postgresql_replicator_password
+    - postgresql_dir
+    - postgresql_data_dir
+
+- name: Create ssh key for postgres user
+  become_user: "{{ postgresql_user }}"
+  user:
+    name: "{{ postgresql_user }}"
+    generate_ssh_key: yes
+    ssh_key_file: .ssh/id_rsa
+
+- name: Get postgres user public key
+  command:
+    cmd: "cat {{ postgresql_dir }}/.ssh/id_rsa.pub"
+  changed_when: False
+  register: postgresql_secondary_pub_key
+
+- name: Add postgres user public key to postgres user on Primary PostgreSQL DB host
+  authorized_key:
+    user: "{{ postgresql_user }}"
+    state: present
+    key: "{{ postgresql_secondary_pub_key.stdout }}"
+  delegate_to: "{{ postgresql_primary_host }}"
+
+- name: Check if Streaming Replication Already Configured
+  stat:
+    path: "{{ postgresql_data_dir }}/recovery.conf"
+  register: postgresql_secondary_recovery_conf
+
+- name: Configure replication user password
+  copy:
+    dest: '/var/lib/pgsql/.pgpass'
+    content: "{{ postgresql_primary_host }}:5432:replication:{{ postgresql_replicator_user }}:{{ postgresql_replicator_password }}"
+    mode: 0600
+    owner: "{{ postgresql_user }}"
+    group: "{{ postgresql_user }}"
+
+- block:
+    - name: Stop PostgreSQL
+      service:
+        name: postgresql-9.4
+        state: stopped
+
+    - name: Delete Existing Data Directory
+      file:
+        path: "{{ postgresql_data_dir }}"
+        state: absent
+
+    - name: Backup Primary PostgreSQL Host Data to Secondary PostgreSQL Host
+      command:
+        cmd: "pg_basebackup -h {{ postgresql_primary_host }} -D {{ postgresql_data_dir }} -U {{ postgresql_replicator_user }} -X stream"
+      become_user: postgres
+  when: not postgresql_secondary_recovery_conf.stat.exists
+
+- name: Configure PostgreSQL as Slave for Streaming Replication
+  template:
+    src: "{{ item }}.conf.secondary.j2"
+    dest: "{{ postgresql_data_dir }}/{{ item }}.conf"
+    owner: "{{ postgresql_user }}"
+    group: "{{ postgresql_user }}"
+  with_items:
+    - pg_hba
+    - postgresql
+    - recovery
+  register: postgresql_secondary_conf
+
+- name: Restart PostgreSQL
+  service:
+    name: postgresql-9.4
+    state: restarted
+    enabled: true
+  when: postgresql_secondary_conf.changed

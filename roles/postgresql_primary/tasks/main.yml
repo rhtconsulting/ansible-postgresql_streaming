@@ -1,0 +1,33 @@
+- name: Verify required variables set
+  fail:
+    msg: "Variable '{{ item }}' is not defined"
+  when: item not in vars
+  with_items:
+    - postgresql_user
+    - postgresql_replicator_user
+    - postgresql_replicator_password
+    - postgresql_data_dir
+    - postgresql_secondary_ip
+
+- name: Create the Replication User
+  become_user: "{{ postgresql_user }}"
+  postgresql_user:
+    name: "{{ postgresql_replicator_user }}"
+    role_attr_flags: REPLICATION
+    password: "{{ postgresql_replicator_password }}"
+
+- name: Configure PostgreSQL as Master for Streaming Replication
+  template:
+    src: "{{ item }}.conf.primary.j2"
+    dest: "{{ postgresql_data_dir }}/{{ item }}.conf"
+  with_items:
+    - pg_hba
+    - postgresql
+  register: postgresql_primary_conf
+
+- name: Restart PostgreSQL
+  service:
+    name: postgresql-9.4
+    state: restarted
+    enabled: true
+  when: postgresql_primary_conf.changed
